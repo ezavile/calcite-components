@@ -716,6 +716,7 @@ export class CalciteSlider {
     this[activeProp] = this.clamp(adjustment, activeProp);
     if (this[activeProp] === adjustment) {
       this.emitInput();
+      this.emitChange();
     }
   }
 
@@ -726,7 +727,6 @@ export class CalciteSlider {
 
   @Listen("pointerdown")
   pointerDownHandler(event: PointerEvent): void {
-    this.isValueChanged = false;
     const x = event.clientX || event.pageX;
     const position = this.translate(x);
     let prop: ActiveSliderProperty = "value";
@@ -739,12 +739,11 @@ export class CalciteSlider {
         prop = closerToMax ? "maxValue" : "minValue";
       }
     }
-    const current = this[prop];
+    const currentValue = this[prop];
     this[prop] = this.clamp(position, prop);
-    if (current !== this[prop]) {
-      this.isValueChanged = true;
+    if (currentValue !== this[prop]) {
+      this.dragStart(prop);
     }
-    this.dragStart(prop);
   }
 
   handleTouchStart(event: TouchEvent): void {
@@ -822,7 +821,6 @@ export class CalciteSlider {
 
   @State() private tickValues: number[] = [];
 
-  @State() private isValueChanged: boolean;
   //--------------------------------------------------------------------------
   //
   //  Private Methods
@@ -912,7 +910,7 @@ export class CalciteSlider {
     document.removeEventListener("pointercancel", this.dragEnd);
 
     this.focusActiveHandle();
-    this.isValueChanged && this.emitChange();
+    this.emitChange();
     this.dragProp = null;
     this.minValueDragRange = null;
     this.maxValueDragRange = null;
