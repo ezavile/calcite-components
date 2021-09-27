@@ -516,7 +516,7 @@ export class CalciteSlider {
       <Host id={id} onTouchStart={this.handleTouchStart}>
         <div class={{ container: true, "container--range": this.isRange }}>
           {this.renderGraph()}
-          <div class="track">
+          <div class="track" ref={this.storeTrackRef}>
             <div
               class="track__range"
               onPointerDown={() => this.dragStart("minMaxValue")}
@@ -713,11 +713,7 @@ export class CalciteSlider {
       return;
     }
     event.preventDefault();
-    this[activeProp] = this.clamp(adjustment, activeProp);
-    if (this[activeProp] === adjustment) {
-      this.emitInput();
-      this.emitChange();
-    }
+    this.setValue(activeProp, this.clamp(adjustment, activeProp));
   }
 
   @Listen("click")
@@ -739,10 +735,11 @@ export class CalciteSlider {
         prop = closerToMax ? "maxValue" : "minValue";
       }
     }
-    const currentValue = this[prop];
-    this[prop] = this.clamp(position, prop);
-    if (currentValue !== this[prop]) {
-      this.dragStart(prop);
+    this.lastDragPropValue = this[prop];
+    this.dragStart(prop);
+    const thumbHovered = !!this.el.shadowRoot.querySelector(".thumb:hover");
+    if (!thumbHovered) {
+      this.setValue(prop, this.clamp(position, prop));
     }
   }
 
@@ -807,9 +804,13 @@ export class CalciteSlider {
 
   private lastDragProp: ActiveSliderProperty;
 
+  private lastDragPropValue: number;
+
   private minHandle: HTMLButtonElement;
 
   private maxHandle: HTMLButtonElement;
+
+  private trackEl: HTMLDivElement;
 
   @State() private activeProp: ActiveSliderProperty = "value";
 
@@ -867,7 +868,6 @@ export class CalciteSlider {
   private dragUpdate = (event: PointerEvent): void => {
     event.preventDefault();
     if (this.dragProp) {
-      const currentValue = this[this.dragProp];
       const value = this.translate(event.clientX || event.pageX);
       if (this.isRange && this.dragProp === "minMaxValue") {
         if (this.minValueDragRange && this.maxValueDragRange && this.minMaxValueRange) {
@@ -887,10 +887,7 @@ export class CalciteSlider {
           this.minMaxValueRange = this.maxValue - this.minValue;
         }
       } else {
-        this[this.dragProp] = this.clamp(value, this.dragProp);
-      }
-      if (currentValue !== this[this.dragProp]) {
-        this.emitInput();
+        this.setValue(this.dragProp, this.clamp(value, this.dragProp));
       }
     }
   };
@@ -910,11 +907,43 @@ export class CalciteSlider {
     document.removeEventListener("pointercancel", this.dragEnd);
 
     this.focusActiveHandle();
-    this.emitChange();
+    if (this.lastDragPropValue != this[this.dragProp]) {
+      this.emitChange();
+    }
     this.dragProp = null;
+    this.lastDragPropValue = null;
     this.minValueDragRange = null;
     this.maxValueDragRange = null;
     this.minMaxValueRange = null;
+  };
+
+  /**
+   * Set the prop value if changed at the component level
+   * @param valueProp
+   * @param value
+   */
+  private setValue(valueProp: string, value: number): void {
+    const oldValue = this[valueProp];
+    const valueChanged = oldValue !== value;
+
+    if (!valueChanged) {
+      return;
+    }
+    this[valueProp] = value;
+    const dragging = this.dragProp;
+    if (!dragging) {
+      this.emitChange();
+    }
+    this.emitInput();
+  }
+
+  /**
+   * Set the reference of the track Element
+   * @internal
+   * @param node
+   */
+  private storeTrackRef = (node: HTMLDivElement): void => {
+    this.trackEl = node;
   };
 
   /**
@@ -940,7 +969,7 @@ export class CalciteSlider {
    */
   private translate(x: number): number {
     const range = this.max - this.min;
-    const { left, width } = this.el.getBoundingClientRect();
+    const { left, width } = this.trackEl.getBoundingClientRect();
     const percent = (x - left) / width;
     const mirror = this.shouldMirror();
     let value = this.clamp(this.min + range * (mirror ? 1 - percent : percent));
